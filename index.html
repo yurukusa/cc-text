@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>cc-text — How Much Does Claude Actually Say?</title>
+<meta name="description" content="73% of Claude Code assistant turns produce no visible text. 54% are tool-only, 20% are silent thinking. Only 27% say anything.">
+<meta property="og:title" content="cc-text — 73% of Claude's Turns Are Silent">
+<meta property="og:description" content="54% tool-only, 20% thinking, 27% text. When Claude does speak, 47% is a one-liner under 50 chars.">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1117;color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+.hero{background:linear-gradient(135deg,#161b22 0%,#0d1117 100%);border-bottom:1px solid #21262d;padding:48px 24px 40px;text-align:center}
+.hero h1{font-size:2.2rem;font-weight:700;color:#f0f6fc;letter-spacing:-0.5px}
+.hero h1 span{color:#ff7b72}
+.hero p{color:#8b949e;margin-top:10px;font-size:1.05rem;max-width:540px;margin-inline:auto}
+.cmd{display:inline-block;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px 18px;font-family:monospace;font-size:1rem;color:#79c0ff;margin-top:18px}
+.drop-zone{border:2px dashed #30363d;border-radius:12px;padding:32px;margin:28px auto;max-width:500px;text-align:center;cursor:pointer;transition:.2s;color:#8b949e;font-size:.95rem}
+.drop-zone:hover,.drop-zone.drag{border-color:#ff7b72;color:#ff7b72}
+.drop-zone.loaded{border-color:#3fb950;color:#3fb950}
+#status{text-align:center;color:#8b949e;font-size:.9rem;margin-bottom:8px}
+.main{max-width:900px;margin:0 auto;padding:32px 16px}
+
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px}
+.stat-box{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:14px 16px;text-align:center}
+.stat-val{font-size:1.7rem;font-weight:700;color:#ff7b72}
+.stat-lbl{font-size:.8rem;color:#8b949e;margin-top:3px}
+
+.card{background:#161b22;border:1px solid #21262d;border-radius:10px;padding:20px;margin-bottom:24px}
+.card-title{font-size:1rem;font-weight:600;color:#f0f6fc;margin-bottom:6px}
+.card-sub{font-size:.82rem;color:#8b949e;margin-bottom:16px}
+
+.bar-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.bar-label{width:88px;font-size:.84rem;font-family:monospace;color:#c9d1d9;text-align:right;flex-shrink:0}
+.bar-track{flex:1;background:#21262d;border-radius:4px;height:26px;position:relative;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;transition:width .5s ease}
+.bar-pct{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:.76rem;font-family:monospace;color:#e6edf3}
+.bar-desc{width:160px;font-size:.75rem;color:#484f58;flex-shrink:0}
+
+.insight ul{list-style:none;display:flex;flex-direction:column;gap:7px;margin-top:10px}
+.insight li{font-size:.88rem;color:#8b949e;padding-left:18px;position:relative;line-height:1.5}
+.insight li::before{content:'→';position:absolute;left:0;color:#ff7b72}
+.insight li strong{color:#e6edf3}
+
+.silent-callout{background:linear-gradient(135deg,rgba(255,123,114,.08) 0%,rgba(255,123,114,.03) 100%);border:1px solid rgba(255,123,114,.3);border-radius:10px;padding:20px;margin-bottom:24px;text-align:center}
+.silent-num{font-size:3.5rem;font-weight:700;color:#ff7b72;line-height:1}
+.silent-label{font-size:.95rem;color:#8b949e;margin-top:8px}
+
+.footer{text-align:center;padding:32px 16px;color:#8b949e;font-size:.85rem;border-top:1px solid #21262d;margin-top:16px}
+.footer a{color:#58a6ff;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="hero">
+  <h1>cc-<span>text</span></h1>
+  <p>How much does Claude actually say? Classifies every assistant turn — silent execution, silent thinking, or actual words.</p>
+  <div class="cmd">npx cc-text</div>
+</div>
+
+<div class="main">
+  <div class="drop-zone" id="dropZone">
+    Drop your <code>~/.claude/projects/</code> folder here<br>
+    <small style="margin-top:6px;display:block">or click to select</small>
+    <input type="file" id="fileInput" webkitdirectory multiple style="display:none">
+  </div>
+  <div id="status"></div>
+
+  <div id="output" style="display:none">
+    <div class="silent-callout" id="silentCallout"></div>
+    <div class="stats-row" id="statsRow"></div>
+    <div class="card" id="turnCard"></div>
+    <div class="card" id="tierCard"></div>
+    <div class="card insight" id="insightCard"></div>
+  </div>
+
+  <!-- Default sample data -->
+  <div id="sample">
+    <div class="silent-callout">
+      <div class="silent-num">73.4%</div>
+      <div class="silent-label">of Claude's turns produce <strong>no visible text</strong><br><span style="font-size:.85rem">tool-only 53.7% + thinking-only 19.7%</span></div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-val">2,266</div><div class="stat-lbl">Sessions</div></div>
+      <div class="stat-box"><div class="stat-val">269K</div><div class="stat-lbl">Total turns</div></div>
+      <div class="stat-box"><div class="stat-val">53</div><div class="stat-lbl">Median chars</div></div>
+      <div class="stat-box"><div class="stat-val">235</div><div class="stat-lbl">Mean chars</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Assistant turn types</div>
+      <div class="card-sub">What does Claude output in each turn?</div>
+      <div class="bar-row"><div class="bar-label">tool-only</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:#ff7b72"></div><div class="bar-pct">53.7%</div></div><div class="bar-desc">executes silently</div></div>
+      <div class="bar-row"><div class="bar-label">thinking</div><div class="bar-track"><div class="bar-fill" style="width:36%;background:#8b949e"></div><div class="bar-pct">19.7%</div></div><div class="bar-desc">thinks silently</div></div>
+      <div class="bar-row"><div class="bar-label">text-only</div><div class="bar-track"><div class="bar-fill" style="width:49%;background:#3fb950"></div><div class="bar-pct">26.6%</div></div><div class="bar-desc">says something</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Text length tiers (when Claude speaks)</div>
+      <div class="card-sub">Of the 26.6% of turns that include text</div>
+      <div class="bar-row"><div class="bar-label">micro</div><div class="bar-track"><div class="bar-fill" style="width:100%;background:#ff7b72"></div><div class="bar-pct">47.2%</div></div><div class="bar-desc">one-liner (&lt;50 chars)</div></div>
+      <div class="bar-row"><div class="bar-label">ack</div><div class="bar-track"><div class="bar-fill" style="width:81%;background:#ffa657"></div><div class="bar-pct">38.2%</div></div><div class="bar-desc">acknowledgment 50–199</div></div>
+      <div class="bar-row"><div class="bar-label">explain</div><div class="bar-track"><div class="bar-fill" style="width:24%;background:#e3b341"></div><div class="bar-pct">11.6%</div></div><div class="bar-desc">explanation 200–999</div></div>
+      <div class="bar-row"><div class="bar-label">essay</div><div class="bar-track"><div class="bar-fill" style="width:6%;background:#3fb950"></div><div class="bar-pct">2.9%</div></div><div class="bar-desc">essay 1000+</div></div>
+      <div style="font-size:.82rem;color:#8b949e;margin-top:12px;font-family:monospace">median 53 chars · mean 235 chars · p90 316 chars</div>
+    </div>
+    <div class="card insight">
+      <div class="card-title">What this means</div>
+      <ul>
+        <li><strong>73% of turns are silent</strong> — Claude executes (54%) or thinks (20%) without saying a word</li>
+        <li><strong>When Claude speaks, it's brief</strong> — 47% of text turns are under 50 chars. Just "Done." or a one-liner</li>
+        <li><strong>Only 3% are essays</strong> (1000+ chars) — long explanations are genuinely rare</li>
+        <li><strong>Mean (235) >> Median (53)</strong> — a few verbose responses skew the average significantly</li>
+        <li><strong>Thinking (19.7%)</strong> — invisible reasoning. Claude works without speaking more than you'd think</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  Part of <a href="https://yurukusa.github.io/cc-toolkit/" target="_blank">cc-toolkit</a> —
+  93 free tools for Claude Code users ·
+  <a href="https://github.com/yurukusa/cc-text" target="_blank">GitHub</a>
+</div>
+
+<script>
+const TEXT_TIERS = [
+  {key:'micro',label:'micro',max:49,desc:'one-liner (<50 chars)',color:'#ff7b72'},
+  {key:'ack',label:'ack',max:199,desc:'acknowledgment 50–199',color:'#ffa657'},
+  {key:'explain',label:'explain',max:999,desc:'explanation 200–999',color:'#e3b341'},
+  {key:'essay',label:'essay',max:Infinity,desc:'essay 1000+',color:'#3fb950'},
+];
+
+function processLines(lines) {
+  let toolOnly=0,textOnly=0,thinkingOnly=0,totalTurns=0;
+  const textLens=[],tierCounts={micro:0,ack:0,explain:0,essay:0};
+  for (const line of lines) {
+    if (!line.includes('"assistant"')) continue;
+    let obj; try{obj=JSON.parse(line);}catch{continue;}
+    const msg=obj.message||obj;
+    if(msg.role!=='assistant') continue;
+    const content=msg.content;
+    if(!Array.isArray(content)) continue;
+    totalTurns++;
+    const types=new Set(content.map(b=>b.type));
+    if(types.has('tool_use')&&!types.has('text')) toolOnly++;
+    else if(types.has('text')&&!types.has('tool_use')){
+      textOnly++;
+      const chars=content.filter(b=>b.type==='text').reduce((s,b)=>s+(b.text||'').length,0);
+      textLens.push(chars);
+      for(const t of TEXT_TIERS) if(chars<=t.max){tierCounts[t.key]++;break;}
+    } else if(types.has('thinking')&&!types.has('tool_use')&&!types.has('text')) thinkingOnly++;
+  }
+  textLens.sort((a,b)=>a-b);
+  const n=textLens.length;
+  return {toolOnly,textOnly,thinkingOnly,totalTurns,textLens,tierCounts,
+    median:n>0?textLens[Math.floor(n/2)]:0,
+    mean:n>0?Math.round(textLens.reduce((a,b)=>a+b,0)/n):0,
+    p90:n>0?textLens[Math.floor(n*0.9)]:0};
+}
+
+function renderStats(m) {
+  document.getElementById('sample').style.display='none';
+  document.getElementById('output').style.display='block';
+  const silentRate=m.totalTurns>0?((m.toolOnly+m.thinkingOnly)/m.totalTurns*100).toFixed(1):'0';
+  document.getElementById('silentCallout').innerHTML=`
+    <div class="silent-num">${silentRate}%</div>
+    <div class="silent-label">of Claude's turns produce <strong>no visible text</strong><br><span style="font-size:.85rem">tool-only ${(m.toolOnly/m.totalTurns*100).toFixed(1)}% + thinking-only ${(m.thinkingOnly/m.totalTurns*100).toFixed(1)}%</span></div>`;
+  document.getElementById('statsRow').innerHTML=[
+    {val:m.totalTurns>999?(m.totalTurns/1000).toFixed(0)+'K':m.totalTurns,lbl:'Total turns'},
+    {val:m.median,lbl:'Median chars'},
+    {val:m.mean,lbl:'Mean chars'},
+    {val:m.p90,lbl:'p90 chars'},
+  ].map(s=>`<div class="stat-box"><div class="stat-val">${s.val}</div><div class="stat-lbl">${s.lbl}</div></div>`).join('');
+  const maxN=Math.max(m.toolOnly,m.textOnly,m.thinkingOnly);
+  document.getElementById('turnCard').innerHTML=`
+    <div class="card-title">Assistant turn types</div>
+    <div class="card-sub">What does Claude output in each turn?</div>
+    ${[
+      {label:'tool-only',n:m.toolOnly,color:'#ff7b72',desc:'executes silently'},
+      {label:'thinking',n:m.thinkingOnly,color:'#8b949e',desc:'thinks silently'},
+      {label:'text-only',n:m.textOnly,color:'#3fb950',desc:'says something'},
+    ].map(r=>{
+      const p=(m.totalTurns>0?(r.n/m.totalTurns*100).toFixed(1):'0.0');
+      const w=maxN>0?Math.round(r.n/maxN*100):0;
+      return `<div class="bar-row"><div class="bar-label">${r.label}</div><div class="bar-track"><div class="bar-fill" style="width:${w}%;background:${r.color}"></div><div class="bar-pct">${p}%</div></div><div class="bar-desc">${r.desc}</div></div>`;
+    }).join('')}`;
+  const maxTier=Math.max(...TEXT_TIERS.map(t=>m.tierCounts[t.key]));
+  document.getElementById('tierCard').innerHTML=`
+    <div class="card-title">Text length tiers (when Claude speaks)</div>
+    <div class="card-sub">Of the ${(m.textOnly/m.totalTurns*100).toFixed(1)}% of turns that include text</div>
+    ${TEXT_TIERS.map(t=>{
+      const n=m.tierCounts[t.key];
+      const p=(m.textOnly>0?(n/m.textOnly*100).toFixed(1):'0.0');
+      const w=maxTier>0?Math.round(n/maxTier*100):0;
+      return `<div class="bar-row"><div class="bar-label">${t.label}</div><div class="bar-track"><div class="bar-fill" style="width:${w}%;background:${t.color}"></div><div class="bar-pct">${p}%</div></div><div class="bar-desc">${t.desc}</div></div>`;
+    }).join('')}
+    <div style="font-size:.82rem;color:#8b949e;margin-top:12px;font-family:monospace">median ${m.median} chars · mean ${m.mean} chars · p90 ${m.p90} chars</div>`;
+  document.getElementById('insightCard').innerHTML=`
+    <div class="card-title">What this means</div>
+    <ul>
+      <li><strong>${silentRate}% of turns are silent</strong> — Claude executes (${(m.toolOnly/m.totalTurns*100).toFixed(0)}%) or thinks (${(m.thinkingOnly/m.totalTurns*100).toFixed(0)}%) without saying a word</li>
+      <li><strong>When Claude speaks, it's brief</strong> — ${(m.tierCounts.micro/m.textOnly*100).toFixed(0)}% of text turns are under 50 chars</li>
+      <li><strong>Only ${(m.tierCounts.essay/m.textOnly*100).toFixed(0)}% are essays</strong> (1000+ chars) — long explanations are genuinely rare</li>
+      <li><strong>Mean (${m.mean}) >> Median (${m.median})</strong> — a few verbose responses skew the average</li>
+      <li><strong>Thinking (${(m.thinkingOnly/m.totalTurns*100).toFixed(1)}%)</strong> — Claude reasons without speaking more than you'd think</li>
+    </ul>`;
+}
+
+const dz=document.getElementById('dropZone');
+const fi=document.getElementById('fileInput');
+dz.onclick=()=>fi.click();
+dz.ondragover=e=>{e.preventDefault();dz.classList.add('drag')};
+dz.ondragleave=()=>dz.classList.remove('drag');
+dz.ondrop=e=>{e.preventDefault();dz.classList.remove('drag');handleFiles(e.dataTransfer.files)};
+fi.onchange=e=>handleFiles(e.target.files);
+
+async function handleFiles(files) {
+  const jsonlFiles=[...files].filter(f=>f.name.endsWith('.jsonl'));
+  if(!jsonlFiles.length){document.getElementById('status').textContent='No .jsonl files found';return;}
+  dz.classList.add('loaded');
+  document.getElementById('status').textContent=`Processing ${jsonlFiles.length} files…`;
+  const allLines=[];
+  await Promise.all(jsonlFiles.map(f=>f.text().then(t=>allLines.push(...t.split('\n')))));
+  const m=processLines(allLines);
+  renderStats(m);
+  document.getElementById('status').textContent=`${jsonlFiles.length} files · ${m.totalTurns.toLocaleString()} turns`;
+}
+</script>
+</body>
+</html>
