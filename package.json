@@ -1,6 +1,6 @@
 {
-  "name": "cc-text",
-  "version": "1.0.0",
+  "name": "@yurukusa/cc-text",
+  "version": "1.0.1",
   "description": "How much does Claude actually say? 73% of assistant turns produce no visible text. Measure silence rate, text length tiers, and thinking patterns.",
   "type": "module",
   "bin": {
@@ -10,8 +10,16 @@
     "start": "node cli.mjs"
   },
   "keywords": [
-    "claude", "claude-code", "anthropic", "cli", "productivity",
-    "ai", "developer-tools", "session-analysis", "text", "output"
+    "claude",
+    "claude-code",
+    "anthropic",
+    "cli",
+    "productivity",
+    "ai",
+    "developer-tools",
+    "session-analysis",
+    "text",
+    "output"
   ],
   "author": "yurukusa",
   "license": "MIT",
